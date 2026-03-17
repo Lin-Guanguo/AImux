@@ -18,7 +18,9 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def _do_capture(pane_id: str, lines: int, ansi: bool) -> str:
     if ansi:
-        return capture_pane_ansi(pane_id)
+        # xterm.js needs \r\n; capture-pane outputs \n only
+        content = capture_pane_ansi(pane_id)
+        return content.replace("\n", "\r\n")
     return capture_pane(pane_id, lines)
 
 
