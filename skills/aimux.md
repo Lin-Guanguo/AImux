@@ -2,6 +2,39 @@
 
 You are managing multiple AI coding agents running in tmux panes. Use this reference to monitor, control, and coordinate them.
 
+## 0. Workspace Conventions
+
+### Session layout
+
+| tmux session | Owner | Purpose |
+|-------------|-------|---------|
+| `0` | Human | User's primary workspace. Windows `0:0`, `0:1`, `0:2`, `0:3` etc. |
+| `9` | AI | AI-created workspace. Create if not exists, reuse if exists. |
+
+### Rules
+
+- **Session `0` is the user's space.** Scan it to understand what the user is working on. Don't create or destroy windows here unless explicitly asked.
+- **Session `9` is AI's workspace.** When you need to spawn new agents, create windows here. One window per pane (no splits).
+- **Creating a pane in session `9`:**
+
+```bash
+# Create session 9 if it doesn't exist
+tmux has-session -t 9 2>/dev/null || tmux new-session -d -s 9
+
+# Create a new window with a meaningful name
+tmux new-window -t 9 -n "task-name"
+```
+
+- **Finding existing panes:** Always check session `0` first (user's work), then session `9` (AI's work).
+
+```bash
+# List user's panes
+tmux list-panes -t 0 -a -F "#{pane_id} | #{window_name} | #{pane_current_command} | #{pane_current_path}"
+
+# List AI's panes
+tmux list-panes -t 9 -a -F "#{pane_id} | #{window_name} | #{pane_current_command} | #{pane_current_path}"
+```
+
 ## 1. Scan: See what's running
 
 ```bash
