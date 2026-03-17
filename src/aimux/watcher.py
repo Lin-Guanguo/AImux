@@ -10,7 +10,7 @@ from .session_mapper import (
     detect_agent_type,
     find_claude_session,
     find_codex_session,
-    read_tail_messages,
+    parse_tail_jsonl,
 )
 
 # Exit codes
@@ -101,7 +101,7 @@ def jsonl_last_is_assistant(cwd: str, agent_type: str) -> bool:
     if not jsonl_path:
         return False
 
-    messages = read_tail_messages(jsonl_path, n=10)
+    messages = parse_tail_jsonl(jsonl_path, max_bytes=8192)
     if not messages:
         return False
 
@@ -136,7 +136,7 @@ def get_last_reply(cwd: str, agent_type: str) -> str | None:
         return None
 
     # Read enough lines to find the last user message even after long tool-call sequences
-    messages = read_tail_messages(jsonl_path, n=500)
+    messages = parse_tail_jsonl(jsonl_path, max_bytes=512 * 1024)
     if not messages:
         return None
 

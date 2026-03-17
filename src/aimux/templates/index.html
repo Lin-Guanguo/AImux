@@ -110,6 +110,8 @@ header button:hover { border-color: var(--accent); }
 let activePaneId = null;
 let eventSource = null;
 let currentState = '';
+let streamTimer = null;
+const STREAM_DELAY = 5000;
 
 const AGENT_LABELS = {
   claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini',
@@ -175,43 +177,67 @@ function selectPane(el) {
   document.getElementById('hdr-agent').textContent = agent;
   document.getElementById('hdr-cwd').textContent = cwd;
 
-  // Start streaming
-  startStream(paneId);
+  // Static capture first, defer SSE
+  stopStream();
+  fetchCapture(paneId);
+  scheduleStream(paneId);
 }
 
-// --- SSE Stream ---
-function startStream(paneId) {
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
+// --- SSE Stream (lazy connection) ---
+function stopStream() {
+  if (streamTimer) { clearTimeout(streamTimer); streamTimer = null; }
+  if (eventSource) { eventSource.close(); eventSource = null; }
+}
 
+async function fetchCapture(paneId) {
   const term = document.getElementById('terminal');
   term.className = 'terminal';
-  term.textContent = 'Connecting...';
+  term.textContent = 'Loading...';
+  const id = paneId.replace('%', '');
+  try {
+    const resp = await fetch(`/api/pane/${id}/capture`);
+    const data = await resp.json();
+    // Only update if still viewing this pane
+    if (activePaneId !== paneId) return;
+    term.textContent = data.content;
+    updateState(data.state);
+    term.scrollTop = term.scrollHeight;
+  } catch (e) {
+    if (activePaneId === paneId) term.textContent = `Error: ${e.message}`;
+  }
+}
 
-  // pane_id is like %3, strip the % for the URL
+function scheduleStream(paneId) {
+  streamTimer = setTimeout(() => {
+    streamTimer = null;
+    if (activePaneId === paneId) startStream(paneId);
+  }, STREAM_DELAY);
+}
+
+function ensureStream() {
+  if (eventSource || !activePaneId) return;
+  if (streamTimer) { clearTimeout(streamTimer); streamTimer = null; }
+  startStream(activePaneId);
+}
+
+function startStream(paneId) {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+
+  const term = document.getElementById('terminal');
   const id = paneId.replace('%', '');
   eventSource = new EventSource(`/api/pane/${id}/stream`);
 
   eventSource.onmessage = (event) => {
+    if (activePaneId !== paneId) { eventSource.close(); eventSource = null; return; }
     const data = JSON.parse(event.data);
-    if (data.error) {
-      term.textContent = `Error: ${data.error}`;
-      eventSource.close();
-      return;
-    }
+    if (data.error) { term.textContent = `Error: ${data.error}`; eventSource.close(); eventSource = null; return; }
     term.textContent = data.content;
     currentState = data.state;
     updateState(data.state);
-    // Auto-scroll to bottom
     term.scrollTop = term.scrollHeight;
   };
 
-  eventSource.onerror = () => {
-    // EventSource auto-reconnects, just show status
-    console.warn('SSE connection error, reconnecting...');
-  };
+  eventSource.onerror = () => { console.warn('SSE connection error, reconnecting...'); };
 }
 
 function updateState(state) {
@@ -232,6 +258,7 @@ async function sendKeys(keys) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keys }),
     });
+    ensureStream();
   } catch (e) {
     console.error('Failed to send keys:', e);
   }
