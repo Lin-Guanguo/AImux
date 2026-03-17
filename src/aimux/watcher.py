@@ -147,6 +147,20 @@ def get_last_reply(cwd: str, agent_type: str) -> str | None:
     return None
 
 
+def _text_from_content(content) -> list[str]:
+    """Extract text strings from a Claude assistant message content field."""
+    parts = []
+    if isinstance(content, str) and content.strip():
+        parts.append(content.strip())
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    parts.append(text)
+    return parts
+
+
 def _extract_claude_reply(messages: list[dict]) -> str | None:
     """Extract all assistant text after the last user message in Claude JSONL."""
     last_user_idx = -1
@@ -154,24 +168,22 @@ def _extract_claude_reply(messages: list[dict]) -> str | None:
         if msg.get("type") == "user":
             last_user_idx = i
 
-    # Fallback: if no user message found in tail, collect text from all assistant
-    # messages at the end (the tail may not reach back far enough)
-    search_from = last_user_idx + 1 if last_user_idx >= 0 else 0
+    if last_user_idx >= 0:
+        # Normal path: collect all assistant text after the last user message
+        parts = []
+        for msg in messages[last_user_idx + 1:]:
+            if msg.get("type") == "assistant":
+                parts.extend(_text_from_content(msg.get("message", {}).get("content", "")))
+        return "\n".join(parts) if parts else None
 
-    parts = []
-    for msg in messages[search_from:]:
+    # Fallback: tail didn't reach the last user message.
+    # Only extract the very last assistant message's text to avoid dumping history.
+    for msg in reversed(messages):
         if msg.get("type") == "assistant":
-            content = msg.get("message", {}).get("content", "")
-            if isinstance(content, str) and content.strip():
-                parts.append(content.strip())
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "").strip()
-                        if text:
-                            parts.append(text)
-
-    return "\n".join(parts) if parts else None
+            parts = _text_from_content(msg.get("message", {}).get("content", ""))
+            if parts:
+                return "\n".join(parts)
+    return None
 
 
 def _extract_codex_reply(messages: list[dict]) -> str | None:
@@ -182,18 +194,26 @@ def _extract_codex_reply(messages: list[dict]) -> str | None:
             if msg.get("payload", {}).get("type") == "user_message":
                 last_user_idx = i
 
-    search_from = last_user_idx + 1 if last_user_idx >= 0 else 0
+    if last_user_idx >= 0:
+        parts = []
+        for msg in messages[last_user_idx + 1:]:
+            if msg.get("type") == "event_msg":
+                payload = msg.get("payload", {})
+                if payload.get("type") in ("assistant_message", "message"):
+                    text = payload.get("message", "").strip()
+                    if text:
+                        parts.append(text)
+        return "\n".join(parts) if parts else None
 
-    parts = []
-    for msg in messages[search_from:]:
+    # Fallback: only the last assistant message
+    for msg in reversed(messages):
         if msg.get("type") == "event_msg":
             payload = msg.get("payload", {})
             if payload.get("type") in ("assistant_message", "message"):
                 text = payload.get("message", "").strip()
                 if text:
-                    parts.append(text)
-
-    return "\n".join(parts) if parts else None
+                    return text
+    return None
 
 
 def _output_result(pane_id: str, agent_type: str, state: str, elapsed: float, cwd: str) -> None:
