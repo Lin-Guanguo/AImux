@@ -135,7 +135,8 @@ def get_last_reply(cwd: str, agent_type: str) -> str | None:
     if not jsonl_path:
         return None
 
-    messages = read_tail_messages(jsonl_path, n=200)
+    # Read enough lines to find the last user message even after long tool-call sequences
+    messages = read_tail_messages(jsonl_path, n=500)
     if not messages:
         return None
 
@@ -153,11 +154,12 @@ def _extract_claude_reply(messages: list[dict]) -> str | None:
         if msg.get("type") == "user":
             last_user_idx = i
 
-    if last_user_idx == -1:
-        return None
+    # Fallback: if no user message found in tail, collect text from all assistant
+    # messages at the end (the tail may not reach back far enough)
+    search_from = last_user_idx + 1 if last_user_idx >= 0 else 0
 
     parts = []
-    for msg in messages[last_user_idx + 1:]:
+    for msg in messages[search_from:]:
         if msg.get("type") == "assistant":
             content = msg.get("message", {}).get("content", "")
             if isinstance(content, str) and content.strip():
@@ -180,11 +182,10 @@ def _extract_codex_reply(messages: list[dict]) -> str | None:
             if msg.get("payload", {}).get("type") == "user_message":
                 last_user_idx = i
 
-    if last_user_idx == -1:
-        return None
+    search_from = last_user_idx + 1 if last_user_idx >= 0 else 0
 
     parts = []
-    for msg in messages[last_user_idx + 1:]:
+    for msg in messages[search_from:]:
         if msg.get("type") == "event_msg":
             payload = msg.get("payload", {})
             if payload.get("type") in ("assistant_message", "message"):
