@@ -1,5 +1,18 @@
+import sys
+
+
 def main() -> None:
-    """CLI entry point: show all pane → session mappings."""
+    """CLI entry point: dispatch to subcommands."""
+    args = sys.argv[1:]
+
+    if args and args[0] == "wait":
+        _cmd_wait(args[1:])
+    else:
+        _cmd_scan()
+
+
+def _cmd_scan() -> None:
+    """Show all pane → session mappings."""
     from .session_mapper import map_all_panes
 
     results = map_all_panes()
@@ -39,3 +52,32 @@ def main() -> None:
         else:
             print(f"  (no session)")
         print()
+
+
+def _cmd_wait(args: list[str]) -> None:
+    """aimux wait <pane_id> [--timeout N] [--interval N]"""
+    from .watcher import wait_for_idle
+
+    if not args or args[0].startswith("-"):
+        print("Usage: aimux wait <pane_id> [--timeout 300] [--interval 2]", file=sys.stderr)
+        sys.exit(1)
+
+    pane_id = args[0]
+    timeout = 300.0
+    interval = 2.0
+
+    # Simple arg parsing
+    i = 1
+    while i < len(args):
+        if args[i] == "--timeout" and i + 1 < len(args):
+            timeout = float(args[i + 1])
+            i += 2
+        elif args[i] == "--interval" and i + 1 < len(args):
+            interval = float(args[i + 1])
+            i += 2
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            sys.exit(1)
+
+    exit_code = wait_for_idle(pane_id, timeout=timeout, interval=interval)
+    sys.exit(exit_code)
