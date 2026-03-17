@@ -113,6 +113,10 @@ let currentState = '';
 let streamTimer = null;
 const STREAM_DELAY = 5000;
 
+function isScrolledToBottom(el) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+}
+
 const AGENT_LABELS = {
   claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini',
   shell: 'Shell', other: 'Other', 'unknown-node': 'Node(?)'
@@ -199,9 +203,10 @@ async function fetchCapture(paneId) {
     const data = await resp.json();
     // Only update if still viewing this pane
     if (activePaneId !== paneId) return;
+    const atBottom = isScrolledToBottom(term);
     term.textContent = data.content;
     updateState(data.state);
-    term.scrollTop = term.scrollHeight;
+    if (atBottom) term.scrollTop = term.scrollHeight;
   } catch (e) {
     if (activePaneId === paneId) term.textContent = `Error: ${e.message}`;
   }
@@ -231,10 +236,11 @@ function startStream(paneId) {
     if (activePaneId !== paneId) { eventSource.close(); eventSource = null; return; }
     const data = JSON.parse(event.data);
     if (data.error) { term.textContent = `Error: ${data.error}`; eventSource.close(); eventSource = null; return; }
+    const atBottom = isScrolledToBottom(term);
     term.textContent = data.content;
     currentState = data.state;
     updateState(data.state);
-    term.scrollTop = term.scrollHeight;
+    if (atBottom) term.scrollTop = term.scrollHeight;
   };
 
   eventSource.onerror = () => { console.warn('SSE connection error, reconnecting...'); };
