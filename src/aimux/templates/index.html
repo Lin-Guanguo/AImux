@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AImux</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1a1b26; --surface: #24283b; --border: #3b4261;
+  --text: #c0caf5; --dim: #565f89; --accent: #7aa2f7;
+  --green: #9ece6a; --yellow: #e0af68; --red: #f7768e; --cyan: #7dcfff;
+}
+body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+header h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+header button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+header button:hover { border-color: var(--accent); }
+.main { display: flex; flex: 1; min-height: 0; }
+
+/* Sidebar */
+.sidebar { width: 260px; border-right: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; padding: 8px 0; }
+.sess-name { padding: 4px 12px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
+.sess-name:first-child { margin-top: 0; }
+.win-label { padding: 2px 12px 2px 20px; font-size: 11px; color: var(--dim); }
+.pane-item { padding: 6px 12px 6px 28px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+.pane-item:hover { background: var(--surface); }
+.pane-item.active { background: var(--surface); border-left-color: var(--accent); }
+.pane-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot.idle { background: var(--green); }
+.dot.generating { background: var(--yellow); animation: pulse 1s infinite; }
+.dot.waiting_input { background: var(--red); animation: pulse 0.6s infinite; }
+.dot.unknown { background: var(--dim); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.pane-item .pane-id { color: var(--cyan); font-family: monospace; font-size: 12px; }
+.pane-item .pane-agent { color: var(--dim); font-size: 11px; }
+
+/* Content area */
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pane-header { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--dim); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.pane-header .state-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.state-badge.idle { background: rgba(158,206,106,0.15); color: var(--green); }
+.state-badge.generating { background: rgba(224,175,104,0.15); color: var(--yellow); }
+.state-badge.waiting_input { background: rgba(247,118,142,0.15); color: var(--red); }
+.state-badge.unknown { background: rgba(86,95,137,0.15); color: var(--dim); }
+
+.terminal { flex: 1; overflow-y: auto; padding: 12px 16px; font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; background: var(--bg); min-height: 0; }
+.terminal.empty { display: flex; align-items: center; justify-content: center; color: var(--dim); font-family: system-ui; }
+
+/* Controls */
+.controls { border-top: 1px solid var(--border); padding: 10px 16px; flex-shrink: 0; }
+.quick-btns { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.quick-btns button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 12px; }
+.quick-btns button:hover { border-color: var(--accent); background: rgba(122,162,247,0.1); }
+.quick-btns button.danger { color: var(--red); }
+.quick-btns button.danger:hover { border-color: var(--red); background: rgba(247,118,142,0.1); }
+.input-row { display: flex; gap: 8px; }
+.input-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 13px; outline: none; }
+.input-row input:focus { border-color: var(--accent); }
+.input-row button { background: var(--accent); border: none; color: var(--bg); padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.input-row button:hover { opacity: 0.9; }
+.input-row button:disabled { opacity: 0.4; cursor: default; }
+
+/* Status bar */
+.statusbar { padding: 4px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--dim); display: flex; gap: 16px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AImux</h1>
+  <button onclick="refreshTree()">Refresh</button>
+</header>
+
+<div class="main">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="content">
+    <div class="pane-header" id="pane-header" style="display:none">
+      <span id="hdr-pane-id"></span>
+      <span id="hdr-agent"></span>
+      <span id="hdr-cwd" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span class="state-badge" id="hdr-state"></span>
+    </div>
+    <div class="terminal empty" id="terminal">Select a pane from the sidebar</div>
+    <div class="controls" id="controls" style="display:none">
+      <div class="quick-btns">
+        <button onclick="sendQuick('C-c')" class="danger" title="Ctrl+C">Ctrl+C</button>
+        <button onclick="sendQuick('Escape')" title="Escape">Esc</button>
+        <button onclick="sendText('y')" title="y + Enter">y&crarr;</button>
+        <button onclick="sendText('n')" title="n + Enter">n&crarr;</button>
+        <button onclick="sendQuick('Enter')" title="Enter">Enter</button>
+        <button onclick="sendQuick('C-d')" class="danger" title="Ctrl+D">Ctrl+D</button>
+        <button onclick="sendQuick('C-z')" title="Ctrl+Z">Ctrl+Z</button>
+        <button onclick="sendText('q')" title="q + Enter">q&crarr;</button>
+      </div>
+      <div class="input-row">
+        <input type="text" id="cmd-input" placeholder="Type command and press Enter..." autocomplete="off">
+        <button id="send-btn" onclick="sendInput()">Send</button>
+      </div>
+    </div>
+    <div class="statusbar" id="statusbar" style="display:none">
+      <span id="status-state"></span>
+      <span id="status-agent"></span>
+      <span id="status-cwd"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+let activePaneId = null;
+let eventSource = null;
+let currentState = '';
+
+const AGENT_LABELS = {
+  claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini',
+  shell: 'Shell', other: 'Other', 'unknown-node': 'Node(?)'
+};
+
+// --- Tree ---
+async function refreshTree() {
+  try {
+    const resp = await fetch('/api/tree');
+    const tree = await resp.json();
+    renderTree(tree);
+  } catch (e) {
+    console.error('Failed to fetch tree:', e);
+  }
+}
+
+function renderTree(tree) {
+  const sb = document.getElementById('sidebar');
+  let html = '';
+  for (const sess of tree) {
+    html += `<div class="sess-name">${esc(sess.session)}</div>`;
+    for (const win of sess.windows) {
+      if (sess.windows.length > 1) {
+        html += `<div class="win-label">window ${win.index}</div>`;
+      }
+      for (const pane of win.panes) {
+        const isActive = pane.id === activePaneId ? ' active' : '';
+        const label = AGENT_LABELS[pane.agent] || pane.command;
+        const project = pane.cwd.split('/').pop();
+        html += `<div class="pane-item${isActive}" data-pane="${esc(pane.id)}" onclick="selectPane(this)" title="${esc(pane.cwd)}">
+          <span class="dot ${pane.state}"></span>
+          <span class="pane-id">${esc(pane.id)}</span>
+          <span class="pane-agent">${esc(label)}</span>
+          <span style="margin-left:auto;color:var(--dim);font-size:11px">${esc(project)}</span>
+        </div>`;
+      }
+    }
+  }
+  sb.innerHTML = html;
+}
+
+// --- Pane selection ---
+function selectPane(el) {
+  const paneId = el.dataset.pane;
+  if (paneId === activePaneId) return;
+
+  // Update sidebar active state
+  document.querySelectorAll('.pane-item.active').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+
+  activePaneId = paneId;
+
+  // Show controls
+  document.getElementById('pane-header').style.display = 'flex';
+  document.getElementById('controls').style.display = 'block';
+  document.getElementById('statusbar').style.display = 'flex';
+
+  // Update header from sidebar data
+  const agent = el.querySelector('.pane-agent').textContent;
+  const cwd = el.title;
+  document.getElementById('hdr-pane-id').textContent = paneId;
+  document.getElementById('hdr-agent').textContent = agent;
+  document.getElementById('hdr-cwd').textContent = cwd;
+
+  // Start streaming
+  startStream(paneId);
+}
+
+// --- SSE Stream ---
+function startStream(paneId) {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+
+  const term = document.getElementById('terminal');
+  term.className = 'terminal';
+  term.textContent = 'Connecting...';
+
+  // pane_id is like %3, strip the % for the URL
+  const id = paneId.replace('%', '');
+  eventSource = new EventSource(`/api/pane/${id}/stream`);
+
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.error) {
+      term.textContent = `Error: ${data.error}`;
+      eventSource.close();
+      return;
+    }
+    term.textContent = data.content;
+    currentState = data.state;
+    updateState(data.state);
+    // Auto-scroll to bottom
+    term.scrollTop = term.scrollHeight;
+  };
+
+  eventSource.onerror = () => {
+    // EventSource auto-reconnects, just show status
+    console.warn('SSE connection error, reconnecting...');
+  };
+}
+
+function updateState(state) {
+  const badge = document.getElementById('hdr-state');
+  badge.className = `state-badge ${state}`;
+  badge.textContent = state.replace('_', ' ');
+  document.getElementById('status-state').textContent = `state: ${state}`;
+  document.getElementById('status-agent').textContent = `pane: ${activePaneId}`;
+}
+
+// --- Send keys ---
+async function sendKeys(keys) {
+  if (!activePaneId) return;
+  const id = activePaneId.replace('%', '');
+  try {
+    await fetch(`/api/pane/${id}/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    });
+  } catch (e) {
+    console.error('Failed to send keys:', e);
+  }
+}
+
+function sendQuick(key) {
+  sendKeys([key]);
+}
+
+function sendText(text) {
+  sendKeys([text, 'Enter']);
+}
+
+function sendInput() {
+  const input = document.getElementById('cmd-input');
+  const text = input.value;
+  if (!text) return;
+  sendKeys([text, 'Enter']);
+  input.value = '';
+  input.focus();
+}
+
+// Enter key in input
+document.getElementById('cmd-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendInput();
+  }
+});
+
+// --- Util ---
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// --- Init ---
+refreshTree();
+// Auto-refresh tree every 10s
+setInterval(refreshTree, 10000);
+</script>
+
+</body>
+</html>

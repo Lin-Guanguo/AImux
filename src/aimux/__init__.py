@@ -7,6 +7,8 @@ def main() -> None:
 
     if args and args[0] == "wait":
         _cmd_wait(args[1:])
+    elif args and args[0] == "web":
+        _cmd_web(args[1:])
     else:
         _cmd_scan()
 
@@ -81,3 +83,27 @@ def _cmd_wait(args: list[str]) -> None:
 
     exit_code = wait_for_idle(pane_id, timeout=timeout, interval=interval)
     sys.exit(exit_code)
+
+
+def _cmd_web(args: list[str]) -> None:
+    """aimux web [--host HOST] [--port PORT]"""
+    host = "0.0.0.0"
+    port = 21840
+
+    i = 0
+    while i < len(args):
+        if args[i] == "--host" and i + 1 < len(args):
+            host = args[i + 1]
+            i += 2
+        elif args[i] == "--port" and i + 1 < len(args):
+            port = int(args[i + 1])
+            i += 2
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            print("Usage: aimux web [--host 0.0.0.0] [--port 8080]", file=sys.stderr)
+            sys.exit(1)
+
+    from .web import create_app
+
+    import uvicorn
+    uvicorn.run(create_app(), host=host, port=port)
