@@ -1,6 +1,11 @@
+---
+name: AImux
+description: This skill should be used when the user asks to "manage tmux agents", "check what's running", "dispatch work to agents", "monitor agent progress", "send a task to a pane", or needs to coordinate multiple AI coding agents running in tmux panes. Covers the full boss-pattern workflow: scan panes, dispatch work, monitor progress, collect results.
+---
+
 # AImux Skill Reference
 
-You are managing multiple AI coding agents running in tmux panes. Use this reference to monitor, control, and coordinate them.
+Manage multiple AI coding agents running in tmux panes. This reference covers monitoring, controlling, and coordinating them.
 
 ## 0. Workspace Conventions
 

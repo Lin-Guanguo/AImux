@@ -4,11 +4,11 @@ Skills for AI-driven tmux session management. These files teach AI agents how to
 
 | Skill | Description |
 |-------|-------------|
-| [aimux.md](skills/aimux.md) | Main workflow: scan panes, dispatch work, monitor progress, collect results |
-| [tmux-control.md](skills/tmux-control.md) | Low-level tmux operations: send-keys, capture-pane, agent state detection |
+| [aimux](skills/aimux/SKILL.md) | Main workflow: scan panes, dispatch work, monitor progress, collect results |
+| [tmux-control](skills/tmux-control/SKILL.md) | Low-level tmux operations: send-keys, capture-pane, agent state detection |
 
 ## Usage
 
-Skills are symlinked to `.claude/skills/` and load automatically in Claude Code sessions within this repo.
+Skills are symlinked to `.claude/skills/` via `../skills` and auto-discovered by Claude Code in this repo.
 
-For other AI tools, point them at `skills/aimux.md` as the entry point.
+For other AI tools, point them at `skills/aimux/SKILL.md` as the entry point.

@@ -2,7 +2,7 @@
 
 Python utilities + AI skill for managing tmux-based coding agents.
 
-**Not a server or framework** — just lightweight CLI tools and a [skills/aimux.md](skills/aimux.md) that teaches AI how to monitor and control your running sessions.
+**Not a server or framework** — just lightweight CLI tools and a [skills/aimux/SKILL.md](skills/aimux/SKILL.md) that teaches AI how to monitor and control your running sessions.
 
 ## What is this?
 
@@ -11,7 +11,7 @@ AImux maps your tmux panes to the AI coding agents running inside them (Claude C
 - **Input** — `tmux send-keys` to inject commands into running sessions
 - **Output** — Agent JSONL session files for structured, lossless conversation data
 
-The core deliverable is **[skills/aimux.md](skills/aimux.md)** — a reference that any AI agent can read to learn how to manage multiple coding agents via tmux. The Python utilities (`aimux` CLI) support the skill by providing pane enumeration, agent detection, and pane→session mapping.
+The core deliverable is **[skills/aimux/SKILL.md](skills/aimux/SKILL.md)** — a reference that any AI agent can read to learn how to manage multiple coding agents via tmux. The Python utilities (`aimux` CLI) support the skill by providing pane enumeration, agent detection, and pane→session mapping.
 
 This combination is unique: it can attach to sessions that are *already running* with full context intact, while still getting structured output — something no other tool can do.
 
@@ -90,9 +90,9 @@ Example output:
 ```
 SKILL.md                 # Skill index
 skills/
-├── aimux.md             # Main skill — AI reads this to manage agents
-└── tmux-control.md      # Low-level tmux operation reference
-.claude/skills/          # Symlinks to skills/ (auto-loaded by Claude Code)
+├── aimux/SKILL.md       # Main skill — AI reads this to manage agents
+└── tmux-control/SKILL.md  # Low-level tmux operation reference
+.claude/skills → ../skills   # Symlink (auto-discovered by Claude Code)
 src/aimux/
 ├── tmux.py              # Thin wrapper: list_panes, capture_pane, send_keys
 ├── session_mapper.py    # Pane → JSONL mapping (Claude Code + Codex)
@@ -108,7 +108,7 @@ docs/                    # Research & design decisions
 
 3. **No state machines.** AI reads the screen via `capture-pane` and decides what's happening. Zero code changes to support new tools.
 
-4. **AI is the orchestrator.** The orchestration logic lives in [skills/aimux.md](skills/aimux.md), not in application code. The skill describes tools and rules — the AI does the rest.
+4. **AI is the orchestrator.** The orchestration logic lives in [skills/aimux/SKILL.md](skills/aimux/SKILL.md), not in application code. The skill describes tools and rules — the AI does the rest.
 
 5. **Human can always intervene.** `tmux attach` and you're in control. AImux operates alongside you, not instead of you.
 
@@ -129,7 +129,7 @@ docs/                    # Research & design decisions
 
 ## Status
 
-Core working: pane enumeration, agent detection, pane→session mapping with JSONL reading. The [skills/aimux.md](skills/aimux.md) covers the full boss-pattern workflow (scan → dispatch → monitor → collect).
+Core working: pane enumeration, agent detection, pane→session mapping with JSONL reading. The [skills/aimux/SKILL.md](skills/aimux/SKILL.md) covers the full boss-pattern workflow (scan → dispatch → monitor → collect).
 
 ## Research
 
