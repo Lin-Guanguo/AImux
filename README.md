@@ -89,9 +89,10 @@ Example output:
 
 ```
 SKILL.md                 # Skill index
-skills/
-├── aimux/SKILL.md       # Main skill — AI reads this to manage agents
-└── tmux-control/SKILL.md  # Low-level tmux operation reference
+skills/aimux/
+├── SKILL.md             # Main skill — AI reads this to manage agents
+└── references/
+    └── tmux-reference.md  # Detailed tmux command reference
 .claude/skills → ../skills   # Symlink (auto-discovered by Claude Code)
 src/aimux/
 ├── tmux.py              # Thin wrapper: list_panes, capture_pane, send_keys

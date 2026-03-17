@@ -166,3 +166,9 @@ When multiple sessions exist for the same directory, the most recent JSONL (by m
 - **Human can take over anytime**: `tmux attach` gives the human full control. Your send-keys and their keyboard input are indistinguishable.
 - **One thing at a time per pane**: Don't send a new prompt while the agent is still generating. Wait for idle state first.
 - **Label panes**: `tmux select-pane -t <pane_id> -T "task-name"` helps you track what each pane is working on.
+
+## Reference
+
+For detailed tmux operations (all special keys, process detection, window/pane management, error handling), consult:
+
+- **[`references/tmux-reference.md`](references/tmux-reference.md)** — Complete tmux command reference

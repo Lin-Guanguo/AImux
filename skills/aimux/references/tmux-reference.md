@@ -1,11 +1,6 @@
----
-name: tmux-control
-description: This skill should be used when the user asks to "send keys to a pane", "capture pane output", "list tmux panes", "detect agent state", "create tmux window", or needs low-level tmux operations like send-keys, capture-pane, and process detection for Claude Code, Codex, or shell panes.
----
+# tmux Reference
 
-# tmux Control
-
-Operate tmux sessions, windows, and panes programmatically for managing, monitoring, or interacting with running processes in tmux panes.
+Detailed tmux operations for programmatic control of sessions, windows, and panes.
 
 ## Listing Panes
 
