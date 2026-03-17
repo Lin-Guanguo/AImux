@@ -51,8 +51,7 @@ header button:hover { border-color: var(--accent); }
 .terminal-text.empty { display: flex; align-items: center; justify-content: center; color: var(--dim); font-family: system-ui; }
 
 /* xterm.js container */
-#xterm-container { flex: 1; min-height: 0; padding: 4px; display: none; overflow: hidden; }
-#xterm-container .xterm { height: 100%; }
+#xterm-container { flex: 1; min-height: 0; padding: 4px; display: none; overflow: auto; }
 
 /* Controls */
 .controls { border-top: 1px solid var(--border); padding: 10px 16px; flex-shrink: 0; }
@@ -118,7 +117,6 @@ header button:hover { border-color: var(--accent); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <script>
 // --- State ---
 let activePaneId = null;
@@ -130,16 +128,17 @@ const STREAM_DELAY = 5000;
 // --- Display mode: 'text' or 'xterm' ---
 let displayMode = (new URLSearchParams(window.location.search)).get('mode') === 'text' ? 'text' : 'xterm';
 let xterm = null;
-let xtermFit = null;
 let xtermReady = false;
 
-function initXterm() {
+function initXterm(cols, rows) {
   if (xterm) return;
   xterm = new Terminal({
     cursorBlink: false,
     cursorStyle: 'bar',
     disableStdin: true,
     scrollback: 0,
+    cols: cols || 80,
+    rows: rows || 24,
     fontSize: 13,
     fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
     theme: {
@@ -153,10 +152,7 @@ function initXterm() {
       brightCyan: '#7dcfff', brightWhite: '#c0caf5',
     },
   });
-  xtermFit = new FitAddon.FitAddon();
-  xterm.loadAddon(xtermFit);
   xterm.open(document.getElementById('xterm-container'));
-  xtermFit.fit();
   xtermReady = true;
 }
 
@@ -178,8 +174,6 @@ function applyMode() {
     modeBtn.textContent = 'Switch to Text';
     textEl.style.display = 'none';
     xtermEl.style.display = 'block';
-    initXterm();
-    setTimeout(() => xtermFit && xtermFit.fit(), 0);
   } else {
     modeLabel.textContent = 'Text mode';
     modeBtn.textContent = 'Switch to Terminal';
@@ -295,17 +289,23 @@ async function fetchCapture(paneId) {
       if (activePaneId === paneId) term.textContent = `Error: ${e.message}`;
     }
   } else {
-    if (!xtermReady) initXterm();
     try {
       const resp = await fetch(`/api/pane/${id}/capture?ansi=1`);
       const data = await resp.json();
       if (activePaneId !== paneId) return;
-      if (data.cols && data.rows) resizeXterm(data.cols, data.rows);
+      if (!xtermReady) {
+        initXterm(data.cols, data.rows);
+      } else if (data.cols && data.rows) {
+        resizeXterm(data.cols, data.rows);
+      }
       xterm.reset();
       xterm.write(data.content);
       updateState(data.state);
     } catch (e) {
-      if (activePaneId === paneId) { xterm.reset(); xterm.write(`Error: ${e.message}`); }
+      if (activePaneId === paneId) {
+        if (!xtermReady) initXterm(80, 24);
+        xterm.reset(); xterm.write(`Error: ${e.message}`);
+      }
     }
   }
 }
@@ -410,9 +410,6 @@ applyMode();
 refreshTree();
 setInterval(refreshTree, 10000);
 
-window.addEventListener('resize', () => {
-  if (xtermFit && displayMode === 'xterm') xtermFit.fit();
-});
 </script>
 
 </body>
