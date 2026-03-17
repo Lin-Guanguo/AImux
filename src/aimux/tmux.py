@@ -39,8 +39,13 @@ def list_panes() -> list[dict]:
 
 
 def capture_pane(pane_id: str, lines: int = 30) -> str:
-    """Capture last N lines from a pane."""
+    """Capture last N lines from a pane (plain text)."""
     return run_tmux("capture-pane", "-t", pane_id, "-p", "-S", f"-{lines}", "-J")
+
+
+def capture_pane_ansi(pane_id: str, lines: int = 30) -> str:
+    """Capture last N lines from a pane with ANSI escape sequences preserved."""
+    return run_tmux("capture-pane", "-t", pane_id, "-p", "-e", "-S", f"-{lines}", "-J")
 
 
 def send_keys(pane_id: str, *keys: str) -> None:
