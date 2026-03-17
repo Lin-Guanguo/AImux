@@ -7,24 +7,24 @@ def main() -> None:
         print("No tmux panes found.")
         return
 
-    # Group by session/window for readability
+    agent_labels = {
+        "claude": "Claude Code",
+        "codex": "Codex",
+        "gemini": "Gemini",
+        "shell": "shell",
+        "other": "other",
+        "unknown-node": "node(?)",
+    }
+
     for r in results:
         pane = r["pane"]
         agent = r["agent"]
         session = r["session"]
-        project = pane["cwd"].rsplit("/", 1)[-1] if "/" in pane["cwd"] else pane["cwd"]
+        project = pane["cwd"].rsplit("/", 1)[-1]
+        label = agent_labels.get(agent, pane.get("command", agent))
+        loc = f"{pane['session']}:{pane['window']}"
 
-        # Pane header
-        agent_label = {
-            "claude": "Claude Code",
-            "codex": "Codex",
-            "gemini": "Gemini",
-            "shell": "shell",
-            "other": pane["command"],
-            "unknown-node": "node(?)",
-        }.get(agent, agent)
-
-        print(f"{pane['pane_id']}  [{agent_label}]  {project}  ({pane['cwd']})")
+        print(f"{pane['pane_id']}  [{label}]  {loc}  {project}  ({pane['cwd']})")
 
         if session:
             sid = session["session_id"][:8]
