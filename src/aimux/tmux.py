@@ -43,9 +43,21 @@ def capture_pane(pane_id: str, lines: int = 30) -> str:
     return run_tmux("capture-pane", "-t", pane_id, "-p", "-S", f"-{lines}", "-J")
 
 
-def capture_pane_ansi(pane_id: str, lines: int = 30) -> str:
-    """Capture last N lines from a pane with ANSI escape sequences preserved."""
-    return run_tmux("capture-pane", "-t", pane_id, "-p", "-e", "-S", f"-{lines}", "-J")
+def capture_pane_ansi(pane_id: str) -> str:
+    """Capture visible pane content with ANSI escape sequences preserved.
+
+    No -J (preserves exact line widths) and no -S (visible area only),
+    so the output matches the pane's actual screen layout for xterm.js.
+    """
+    return run_tmux("capture-pane", "-t", pane_id, "-p", "-e")
+
+
+def get_pane_size(pane_id: str) -> tuple[int, int]:
+    """Return (width, height) of a pane."""
+    fmt = "#{pane_width}\t#{pane_height}"
+    out = run_tmux("display-message", "-t", pane_id, "-p", fmt)
+    parts = out.strip().split("\t")
+    return int(parts[0]), int(parts[1])
 
 
 def send_keys(pane_id: str, *keys: str) -> None:

@@ -17,7 +17,7 @@ header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: fl
 header h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
 header button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 header button:hover { border-color: var(--accent); }
-header button.active { border-color: var(--accent); background: rgba(122,162,247,0.15); }
+.mode-indicator { font-size: 11px; color: var(--dim); }
 .main { display: flex; flex: 1; min-height: 0; }
 
 /* Sidebar */
@@ -51,7 +51,7 @@ header button.active { border-color: var(--accent); background: rgba(122,162,247
 .terminal-text.empty { display: flex; align-items: center; justify-content: center; color: var(--dim); font-family: system-ui; }
 
 /* xterm.js container */
-#xterm-container { flex: 1; min-height: 0; padding: 4px; display: none; }
+#xterm-container { flex: 1; min-height: 0; padding: 4px; display: none; overflow: hidden; }
 #xterm-container .xterm { height: 100%; }
 
 /* Controls */
@@ -78,7 +78,8 @@ header button.active { border-color: var(--accent); background: rgba(122,162,247
   <h1>AImux</h1>
   <button onclick="refreshTree()">Refresh</button>
   <span style="flex:1"></span>
-  <button id="mode-btn" onclick="toggleMode()">Terminal</button>
+  <span class="mode-indicator" id="mode-label"></span>
+  <button id="mode-btn" onclick="toggleMode()"></button>
 </header>
 
 <div class="main">
@@ -138,7 +139,7 @@ function initXterm() {
     cursorBlink: false,
     cursorStyle: 'bar',
     disableStdin: true,
-    scrollback: 1000,
+    scrollback: 0,
     fontSize: 13,
     fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
     theme: {
@@ -159,21 +160,29 @@ function initXterm() {
   xtermReady = true;
 }
 
+function resizeXterm(cols, rows) {
+  if (!xterm || !xtermReady) return;
+  if (xterm.cols !== cols || xterm.rows !== rows) {
+    xterm.resize(cols, rows);
+  }
+}
+
 function applyMode() {
   const modeBtn = document.getElementById('mode-btn');
+  const modeLabel = document.getElementById('mode-label');
   const textEl = document.getElementById('terminal-text');
   const xtermEl = document.getElementById('xterm-container');
 
   if (displayMode === 'xterm') {
-    modeBtn.textContent = 'Text';
-    modeBtn.classList.add('active');
+    modeLabel.textContent = 'Terminal mode';
+    modeBtn.textContent = 'Switch to Text';
     textEl.style.display = 'none';
     xtermEl.style.display = 'block';
     initXterm();
     setTimeout(() => xtermFit && xtermFit.fit(), 0);
   } else {
-    modeBtn.textContent = 'Terminal';
-    modeBtn.classList.remove('active');
+    modeLabel.textContent = 'Text mode';
+    modeBtn.textContent = 'Switch to Terminal';
     textEl.style.display = '';
     xtermEl.style.display = 'none';
   }
@@ -291,6 +300,7 @@ async function fetchCapture(paneId) {
       const resp = await fetch(`/api/pane/${id}/capture?ansi=1`);
       const data = await resp.json();
       if (activePaneId !== paneId) return;
+      if (data.cols && data.rows) resizeXterm(data.cols, data.rows);
       xterm.reset();
       xterm.write(data.content);
       updateState(data.state);
@@ -338,6 +348,7 @@ function startStream(paneId) {
       term.textContent = data.content;
       if (atBottom) term.scrollTop = term.scrollHeight;
     } else {
+      if (data.cols && data.rows) resizeXterm(data.cols, data.rows);
       xterm.write('\x1b[H\x1b[J' + data.content);
     }
     currentState = data.state;

@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from .tmux import list_panes, capture_pane, capture_pane_ansi, send_keys
+from .tmux import list_panes, capture_pane, capture_pane_ansi, get_pane_size, send_keys
 from .session_mapper import detect_agent_type
 from .watcher import detect_screen_state
 
@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def _do_capture(pane_id: str, lines: int, ansi: bool) -> str:
     if ansi:
-        return capture_pane_ansi(pane_id, lines)
+        return capture_pane_ansi(pane_id)
     return capture_pane(pane_id, lines)
 
 
@@ -52,6 +52,8 @@ def create_app() -> FastAPI:
                 "cwd": pane["cwd"],
                 "agent": agent,
                 "state": state,
+                "width": pane["width"],
+                "height": pane["height"],
             })
         result = []
         for sess in sorted(sessions.values(), key=lambda s: s["session"]):
@@ -69,7 +71,12 @@ def create_app() -> FastAPI:
         pane_id_fmt = f"%{pane_id}"
         content = await asyncio.to_thread(_do_capture, pane_id_fmt, lines, bool(ansi))
         state = await asyncio.to_thread(detect_screen_state, pane_id_fmt)
-        return {"content": content, "state": state}
+        resp = {"content": content, "state": state}
+        if ansi:
+            w, h = await asyncio.to_thread(get_pane_size, pane_id_fmt)
+            resp["cols"] = w
+            resp["rows"] = h
+        return resp
 
     @app.get("/api/pane/{pane_id}/stream")
     async def pane_stream(pane_id: str, lines: int = 50, ansi: int = 0):
@@ -88,7 +95,15 @@ def create_app() -> FastAPI:
                     return
                 if content != prev:
                     prev = content
-                    data = json.dumps({"content": content, "state": state})
+                    payload = {"content": content, "state": state}
+                    if use_ansi:
+                        try:
+                            w, h = get_pane_size(pane_id_fmt)
+                            payload["cols"] = w
+                            payload["rows"] = h
+                        except RuntimeError:
+                            pass
+                    data = json.dumps(payload)
                     yield f"data: {data}\n\n"
                 await asyncio.sleep(0.5)
 
