@@ -86,18 +86,30 @@ def detect_screen_state(pane_id: str) -> str:
     return STATE_UNKNOWN
 
 
+def _get_jsonl_path(cwd: str, agent_type: str):
+    """Resolve JSONL session file path for a given cwd and agent type."""
+    if agent_type in ("claude", "unknown-node"):
+        return find_claude_session(cwd)
+    elif agent_type == "codex":
+        return find_codex_session(cwd)
+    return None
+
+
+def _get_jsonl_size(cwd: str, agent_type: str) -> int:
+    """Get current JSONL file size in bytes. Returns 0 if not found."""
+    path = _get_jsonl_path(cwd, agent_type)
+    if path and path.exists():
+        return path.stat().st_size
+    return 0
+
+
 def jsonl_last_is_assistant(cwd: str, agent_type: str) -> bool:
     """Check if the JSONL session's last meaningful entry is an assistant message.
 
     This confirms the agent has actually produced a reply, not just that
     the screen shows a prompt (which could mean the task hasn't started yet).
     """
-    jsonl_path = None
-    if agent_type in ("claude", "unknown-node"):
-        jsonl_path = find_claude_session(cwd)
-    elif agent_type == "codex":
-        jsonl_path = find_codex_session(cwd)
-
+    jsonl_path = _get_jsonl_path(cwd, agent_type)
     if not jsonl_path:
         return False
 
@@ -232,12 +244,14 @@ def _output_result(pane_id: str, agent_type: str, state: str, elapsed: float, cw
 def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> int:
     """Block until pane agent becomes idle or times out.
 
-    Dual-signal detection:
-      - Screen shows idle (❯ prompt)  AND
-      - JSONL last entry is assistant (not user)
-    Both must be true to confirm the agent actually finished.
-    This prevents false positives when send-keys was just sent but
-    the agent hasn't started processing yet.
+    Triple-signal detection:
+      1. Screen shows idle (❯ prompt)
+      2. JSONL last entry is assistant (not user)
+      3. JSONL file has grown since wait started (new content was written)
+
+    Signal 3 prevents the race condition where send-keys was just sent but
+    the JSONL hasn't been updated yet — the old assistant message would
+    otherwise cause a false "complete" detection.
 
     Returns exit code and prints JSON result to stdout.
     """
@@ -251,6 +265,10 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
     cwd = pane["cwd"]
     start = time.monotonic()
 
+    # Snapshot JSONL size at start — completion requires the file to have grown,
+    # proving the agent actually processed something after wait began.
+    initial_jsonl_size = _get_jsonl_size(cwd, agent_type)
+
     while True:
         elapsed = time.monotonic() - start
 
@@ -261,11 +279,13 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
             return EXIT_WAITING_INPUT
 
         if screen_state == STATE_IDLE:
-            # Dual-signal: screen says idle, confirm JSONL has assistant reply
-            if jsonl_last_is_assistant(cwd, agent_type):
+            current_size = _get_jsonl_size(cwd, agent_type)
+            jsonl_grew = current_size > initial_jsonl_size
+            if jsonl_grew and jsonl_last_is_assistant(cwd, agent_type):
                 _output_result(pane_id, agent_type, STATE_IDLE, elapsed, cwd)
                 return EXIT_IDLE
-            # Screen idle but JSONL last is user → agent hasn't started yet, keep waiting
+            # Not ready yet: either JSONL hasn't grown (task not started)
+            # or last entry is user (agent still processing)
 
         if elapsed >= timeout:
             _output_result(pane_id, agent_type, screen_state, elapsed, cwd)
