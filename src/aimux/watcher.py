@@ -13,6 +13,9 @@ from .session_mapper import (
     parse_tail_jsonl,
 )
 
+# Maximum reply characters before truncation (default, overridable via --reply-max)
+DEFAULT_REPLY_MAX = 4000
+
 # Exit codes
 EXIT_IDLE = 0
 EXIT_TIMEOUT = 1
@@ -228,20 +231,62 @@ def _extract_codex_reply(messages: list[dict]) -> str | None:
     return None
 
 
-def _output_result(pane_id: str, agent_type: str, state: str, elapsed: float, cwd: str) -> None:
+def get_reply_with_meta(cwd: str, agent_type: str, reply_max: int = DEFAULT_REPLY_MAX) -> dict:
+    """Get agent's last reply with metadata about retrieval success.
+
+    Returns dict with keys:
+      reply       - str or None (the reply text, possibly truncated)
+      reply_error - str or None: "jsonl_not_found", "no_assistant_reply", "read_error"
+      reply_truncated - bool (True if reply was cut to reply_max chars)
+    """
+    jsonl_path = _get_jsonl_path(cwd, agent_type)
+    if not jsonl_path:
+        return {"reply": None, "reply_error": "jsonl_not_found", "reply_truncated": False}
+
+    try:
+        text = get_last_reply(cwd, agent_type)
+    except Exception:
+        return {"reply": None, "reply_error": "read_error", "reply_truncated": False}
+
+    if text is None:
+        return {"reply": None, "reply_error": "no_assistant_reply", "reply_truncated": False}
+
+    truncated = len(text) > reply_max
+    if truncated:
+        text = text[:reply_max] + "\n... [truncated]"
+    return {"reply": text, "reply_error": None, "reply_truncated": truncated}
+
+
+def _output_result(pane_id: str, agent_type: str, state: str, elapsed: float, cwd: str,
+                   reply_max: int = DEFAULT_REPLY_MAX) -> None:
     """Print JSON result to stdout."""
-    reply = get_last_reply(cwd, agent_type) if state != STATE_UNKNOWN else None
-    json.dump({
+    if state != STATE_UNKNOWN:
+        meta = get_reply_with_meta(cwd, agent_type, reply_max=reply_max)
+    else:
+        meta = {"reply": None, "reply_error": None, "reply_truncated": False}
+
+    # Capture last 10 screen lines as supplementary context
+    try:
+        pane_tail = capture_pane(pane_id, lines=10).strip()
+    except RuntimeError:
+        pane_tail = None
+
+    result = {
         "pane": pane_id,
         "agent": agent_type,
         "state": state,
         "elapsed": round(elapsed, 1),
-        "reply": reply,
-    }, sys.stdout, ensure_ascii=False)
+        "reply": meta["reply"],
+        "reply_error": meta["reply_error"],
+        "reply_truncated": meta["reply_truncated"],
+        "pane_tail": pane_tail,
+    }
+    json.dump(result, sys.stdout, ensure_ascii=False)
     print()
 
 
-def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> int:
+def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2,
+                   reply_max: int = DEFAULT_REPLY_MAX) -> int:
     """Block until pane agent becomes idle or times out.
 
     Quad-signal detection:
@@ -285,7 +330,7 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
         screen_state = detect_screen_state(pane_id)
 
         if screen_state == STATE_WAITING_INPUT:
-            _output_result(pane_id, agent_type, STATE_WAITING_INPUT, elapsed, cwd)
+            _output_result(pane_id, agent_type, STATE_WAITING_INPUT, elapsed, cwd, reply_max=reply_max)
             return EXIT_WAITING_INPUT
 
         if screen_state == STATE_IDLE:
@@ -297,7 +342,7 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
             if jsonl_grew and jsonl_stable and jsonl_last_is_assistant(cwd, agent_type):
                 consecutive_idle += 1
                 if consecutive_idle >= STABLE_IDLE_CHECKS:
-                    _output_result(pane_id, agent_type, STATE_IDLE, elapsed, cwd)
+                    _output_result(pane_id, agent_type, STATE_IDLE, elapsed, cwd, reply_max=reply_max)
                     return EXIT_IDLE
                 # Passed once but need more checks to confirm stability
             else:
@@ -307,7 +352,7 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
             consecutive_idle = 0
 
         if elapsed >= timeout:
-            _output_result(pane_id, agent_type, screen_state, elapsed, cwd)
+            _output_result(pane_id, agent_type, screen_state, elapsed, cwd, reply_max=reply_max)
             return EXIT_TIMEOUT
 
         time.sleep(interval)

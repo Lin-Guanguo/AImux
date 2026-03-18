@@ -57,16 +57,17 @@ def _cmd_scan() -> None:
 
 
 def _cmd_wait(args: list[str]) -> None:
-    """aimux wait <pane_id> [--timeout N] [--interval N]"""
-    from .watcher import wait_for_idle
+    """aimux wait <pane_id> [--timeout N] [--interval N] [--reply-max N]"""
+    from .watcher import DEFAULT_REPLY_MAX, wait_for_idle
 
     if not args or args[0].startswith("-"):
-        print("Usage: aimux wait <pane_id> [--timeout 300] [--interval 2]", file=sys.stderr)
+        print("Usage: aimux wait <pane_id> [--timeout 300] [--interval 2] [--reply-max 4000]", file=sys.stderr)
         sys.exit(1)
 
     pane_id = args[0]
     timeout = 300.0
     interval = 2.0
+    reply_max = DEFAULT_REPLY_MAX
 
     # Simple arg parsing
     i = 1
@@ -77,11 +78,14 @@ def _cmd_wait(args: list[str]) -> None:
         elif args[i] == "--interval" and i + 1 < len(args):
             interval = float(args[i + 1])
             i += 2
+        elif args[i] == "--reply-max" and i + 1 < len(args):
+            reply_max = int(args[i + 1])
+            i += 2
         else:
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             sys.exit(1)
 
-    exit_code = wait_for_idle(pane_id, timeout=timeout, interval=interval)
+    exit_code = wait_for_idle(pane_id, timeout=timeout, interval=interval, reply_max=reply_max)
     sys.exit(exit_code)
 
 
