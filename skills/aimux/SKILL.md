@@ -155,7 +155,7 @@ aimux
 tmux send-keys -t <pane_id> "your instruction here" Enter
 
 # 3. 后台监听 + 完成通知（关键！）
-exec background:true command:"cd /path/to/AImux && uv run aimux wait <pane_id> --timeout 300; openclaw agent --agent main --to 'discord:861231414467756062' --message 'pane <pane_id> 任务完成' --deliver --timeout 60"
+exec background:true command:"cd /path/to/AImux && uv run aimux wait <pane_id> --timeout 300; openclaw agent --agent main --channel discord --to 'discord:861231414467756062' --message 'pane <pane_id> 任务完成' --deliver --timeout 60"
 
 # 4. 立即回复用户，不要等
 ```

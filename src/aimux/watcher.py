@@ -244,14 +244,16 @@ def _output_result(pane_id: str, agent_type: str, state: str, elapsed: float, cw
 def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> int:
     """Block until pane agent becomes idle or times out.
 
-    Triple-signal detection:
+    Quad-signal detection:
       1. Screen shows idle (❯ prompt)
       2. JSONL last entry is assistant (not user)
       3. JSONL file has grown since wait started (new content was written)
+      4. JSONL size is stable (unchanged for one full poll cycle)
 
-    Signal 3 prevents the race condition where send-keys was just sent but
-    the JSONL hasn't been updated yet — the old assistant message would
-    otherwise cause a false "complete" detection.
+    Signal 4 prevents the race where Claude Code is between tool calls:
+    the screen briefly shows ❯ and JSONL has an assistant entry, but the
+    agent is still working.  Requiring size stability ensures writes have
+    stopped before declaring idle.
 
     Returns exit code and prints JSON result to stdout.
     """
@@ -269,6 +271,14 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
     # proving the agent actually processed something after wait began.
     initial_jsonl_size = _get_jsonl_size(cwd, agent_type)
 
+    # Track previous JSONL size to detect stability (no new writes).
+    prev_jsonl_size = initial_jsonl_size
+
+    # Number of consecutive polls where all idle signals are true.
+    # Require >= STABLE_IDLE_CHECKS to confirm (prevents flicker between tool calls).
+    STABLE_IDLE_CHECKS = 2
+    consecutive_idle = 0
+
     while True:
         elapsed = time.monotonic() - start
 
@@ -281,11 +291,20 @@ def wait_for_idle(pane_id: str, timeout: float = 300, interval: float = 2) -> in
         if screen_state == STATE_IDLE:
             current_size = _get_jsonl_size(cwd, agent_type)
             jsonl_grew = current_size > initial_jsonl_size
-            if jsonl_grew and jsonl_last_is_assistant(cwd, agent_type):
-                _output_result(pane_id, agent_type, STATE_IDLE, elapsed, cwd)
-                return EXIT_IDLE
-            # Not ready yet: either JSONL hasn't grown (task not started)
-            # or last entry is user (agent still processing)
+            jsonl_stable = current_size == prev_jsonl_size
+            prev_jsonl_size = current_size
+
+            if jsonl_grew and jsonl_stable and jsonl_last_is_assistant(cwd, agent_type):
+                consecutive_idle += 1
+                if consecutive_idle >= STABLE_IDLE_CHECKS:
+                    _output_result(pane_id, agent_type, STATE_IDLE, elapsed, cwd)
+                    return EXIT_IDLE
+                # Passed once but need more checks to confirm stability
+            else:
+                consecutive_idle = 0
+        else:
+            prev_jsonl_size = _get_jsonl_size(cwd, agent_type)
+            consecutive_idle = 0
 
         if elapsed >= timeout:
             _output_result(pane_id, agent_type, screen_state, elapsed, cwd)
