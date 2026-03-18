@@ -127,7 +127,8 @@ def cwd_to_claude_project_dirs(cwd: str) -> list[Path]:
     for path_str in [cwd, _find_git_root(cwd)]:
         if not path_str:
             continue
-        encoded = path_str.replace("/", "-")
+        # Claude Code encodes both "/" and "_" as "-" in project directory names
+        encoded = path_str.replace("/", "-").replace("_", "-")
         project_dir = CLAUDE_PROJECTS_DIR / encoded
         if project_dir not in seen and project_dir.is_dir():
             seen.add(project_dir)
@@ -136,7 +137,7 @@ def cwd_to_claude_project_dirs(cwd: str) -> list[Path]:
     # Walk up a few levels as fallback
     p = Path(cwd).resolve()
     for parent in list(p.parents)[:3]:
-        encoded = str(parent).replace("/", "-")
+        encoded = str(parent).replace("/", "-").replace("_", "-")
         project_dir = CLAUDE_PROJECTS_DIR / encoded
         if project_dir not in seen and project_dir.is_dir():
             seen.add(project_dir)
