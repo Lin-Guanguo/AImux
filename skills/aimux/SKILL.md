@@ -113,6 +113,16 @@ tmux send-keys -t <pane_id> "n" Enter    # deny
 tmux send-keys -t <pane_id> C-c          # interrupt current response
 ```
 
+### Send an image to a pane
+
+Claude Code 可以通过文件路径读取图片，效果等同于 Ctrl+V 粘贴：
+
+```bash
+tmux send-keys -t <pane_id> "分析这张图片 /path/to/image.jpg" Enter
+```
+
+典型场景：用户通过 Discord 发图片 → OpenClaw 自动保存到 `~/.openclaw/media/inbound/<uuid>.jpg` → 直接 send-keys 引用该路径即可。
+
 ### Special operations
 
 | Agent | Exit | Cancel plan mode |
