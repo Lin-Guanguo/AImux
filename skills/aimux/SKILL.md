@@ -120,18 +120,70 @@ tmux send-keys -t <pane_id> C-c          # interrupt current response
 | Claude Code | `C-c C-c` (two Ctrl-C) | `Escape` |
 | Codex | `C-c` | — |
 
-## 4. Workflow: Boss pattern
+## 4. Workflow: Dispatch + Async Wait (推荐)
 
-The standard workflow for managing multiple agents:
+**核心原则：你是调度器，不是执行者。** 下发任务后立即返回，用 `aimux wait` 后台监听完成。这样你能快速响应用户、同时跟进多条任务线。
 
-### Dispatch work
+### 标准流程
 
 ```
-1. Run `aimux` to see all panes
-2. Pick an idle pane (❯ prompt visible)
-3. Send it a task via send-keys
-4. Move to the next idle pane
+1. aimux               → 扫描所有 pane，找到空闲的
+2. send-keys 下发任务   → 秒完成
+3. aimux wait 后台监听  → exec background:true，不阻塞你
+4. 立即回复用户         → "已下发，完成后汇报"
+5. wait 进程退出        → OpenClaw notifyOnExit 自动唤醒你
+6. 读取结果 + 汇报      → capture-pane 或 JSONL
 ```
+
+### Dispatch（下发任务）
+
+```bash
+# 1. 扫描
+aimux
+
+# 2. 下发
+tmux send-keys -t <pane_id> "your instruction here" Enter
+
+# 3. 后台监听 + 完成通知（关键！）
+exec background:true command:"cd /path/to/AImux && uv run aimux wait <pane_id> --timeout 300; openclaw agent --agent main --to 'discord:861231414467756062' --message 'pane <pane_id> 任务完成' --deliver --timeout 60"
+
+# 4. 立即回复用户，不要等
+```
+
+当 `aimux wait` 退出后，`openclaw agent --deliver` 会注入消息触发你的 agent turn，你会被唤醒并可以在当前对话中主动汇报结果。
+
+### 退出码
+
+| Code | 含义 | 你该做什么 |
+|------|------|-----------|
+| 0 | agent 完成（idle） | capture-pane 读结果，汇报给用户 |
+| 1 | 超时 | capture-pane 看状态，决定是否继续等或中断 |
+| 2 | agent 在等审批 | 告知用户或自动审批 |
+| 3 | pane 不存在 | 报错 |
+
+### 多任务并行
+
+```bash
+# 同时下发多个任务
+tmux send-keys -t %3 "task A" Enter
+tmux send-keys -t %6 "task B" Enter
+
+# 分别监听
+exec background:true command:"uv run aimux wait %3 --timeout 300"
+exec background:true command:"uv run aimux wait %6 --timeout 300"
+
+# 哪个先完成，哪个先唤醒你
+```
+
+### ⚠️ 不要做的事
+
+- **不要** 在 send-keys 后反复 capture-pane 轮询 — 用 aimux wait
+- **不要** 在等 agent 完成的过程中阻塞主对话 — 用 background
+- **不要** 自己去写代码 — 你是 boss，下指令就好
+
+## 4b. Workflow: 手动监控（备用）
+
+仅在 `aimux wait` 不可用、或需要即时查看时使用：
 
 ### Monitor
 
