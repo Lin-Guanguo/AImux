@@ -222,7 +222,7 @@ function applyMode() {
   if (activePaneId) {
     stopStream();
     if (displayMode === 'jsonl') {
-      fetchJsonl(activePaneId);
+      fetchJsonl(activePaneId, true);
       startJsonlPolling(activePaneId);
     } else {
       fetchCapture(activePaneId);
@@ -308,7 +308,7 @@ function selectPane(el) {
   stopStream();
   stopJsonlPolling();
   if (displayMode === 'jsonl') {
-    fetchJsonl(paneId);
+    fetchJsonl(paneId, true);
     startJsonlPolling(paneId);
   } else {
     fetchCapture(paneId);
@@ -450,22 +450,32 @@ document.getElementById('cmd-input').addEventListener('keydown', (e) => {
 });
 
 // --- JSONL / Conversation view ---
-async function fetchJsonl(paneId) {
+let lastJsonlHtml = '';
+
+async function fetchJsonl(paneId, isInitial) {
   const id = paneId.replace('%', '');
   const view = document.getElementById('jsonl-view');
-  view.innerHTML = '<div class="jsonl-empty">Loading conversation...</div>';
+  if (isInitial) {
+    view.innerHTML = '<div class="jsonl-empty">Loading conversation...</div>';
+    lastJsonlHtml = '';
+  }
   try {
     const resp = await fetch(`/api/pane/${id}/jsonl?limit=40`);
     const data = await resp.json();
     if (activePaneId !== paneId) return;
     if (data.error && !data.messages.length) {
-      view.innerHTML = `<div class="jsonl-empty">${esc(data.error)}</div>`;
+      const errHtml = `<div class="jsonl-empty">${esc(data.error)}</div>`;
+      if (lastJsonlHtml !== errHtml) {
+        view.innerHTML = errHtml;
+        lastJsonlHtml = errHtml;
+      }
       return;
     }
     renderJsonl(data, view);
   } catch (e) {
     if (activePaneId === paneId) {
       view.innerHTML = `<div class="jsonl-empty">Error: ${esc(e.message)}</div>`;
+      lastJsonlHtml = '';
     }
   }
 }
@@ -477,7 +487,10 @@ function renderJsonl(data, container) {
   }
   if (!data.messages || !data.messages.length) {
     html += '<div class="jsonl-empty">No conversation messages found</div>';
-    container.innerHTML = html;
+    if (lastJsonlHtml !== html) {
+      container.innerHTML = html;
+      lastJsonlHtml = html;
+    }
     return;
   }
   for (const msg of data.messages) {
@@ -500,9 +513,17 @@ function renderJsonl(data, container) {
     }
     html += '</div>';
   }
+  // Skip DOM update if content unchanged — prevents scroll reset and flicker
+  if (html === lastJsonlHtml) return;
+  lastJsonlHtml = html;
   const atBottom = isScrolledToBottom(container);
+  const savedScroll = container.scrollTop;
   container.innerHTML = html;
-  if (atBottom) container.scrollTop = container.scrollHeight;
+  if (atBottom) {
+    container.scrollTop = container.scrollHeight;
+  } else {
+    container.scrollTop = savedScroll;
+  }
 }
 
 function renderMarkdown(text) {
