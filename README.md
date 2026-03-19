@@ -88,7 +88,6 @@ Example output:
 ## Project structure
 
 ```
-SKILL.md                 # Skill index
 skills/aimux/
 ├── SKILL.md             # Main skill — AI reads this to manage agents
 └── references/

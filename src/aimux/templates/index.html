@@ -53,6 +53,31 @@ header button:hover { border-color: var(--accent); }
 /* xterm.js container */
 #xterm-container { flex: 1; min-height: 0; padding: 4px; display: none; overflow: auto; }
 
+/* JSON/Conversation view */
+#jsonl-view { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: none; }
+.conv-msg { margin-bottom: 16px; border-radius: 8px; padding: 12px 16px; }
+.conv-msg.user { background: rgba(122,162,247,0.10); border-left: 3px solid var(--accent); }
+.conv-msg.assistant { background: rgba(158,206,106,0.08); border-left: 3px solid var(--green); }
+.conv-msg.system { background: rgba(86,95,137,0.12); border-left: 3px solid var(--dim); }
+.conv-role { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.conv-role.user { color: var(--accent); }
+.conv-role.assistant { color: var(--green); }
+.conv-role.system { color: var(--dim); }
+.conv-body { font-size: 13px; line-height: 1.6; }
+.conv-body p { margin: 0 0 8px 0; }
+.conv-body p:last-child { margin-bottom: 0; }
+.conv-body pre { background: rgba(0,0,0,0.3); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; font-size: 12px; }
+.conv-body code { background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: "JetBrains Mono", monospace; }
+.conv-body pre code { background: none; padding: 0; }
+.conv-body ul, .conv-body ol { padding-left: 20px; margin: 6px 0; }
+.conv-body h1, .conv-body h2, .conv-body h3 { margin: 8px 0 4px; font-size: 14px; color: var(--text); }
+.conv-body blockquote { border-left: 2px solid var(--border); padding-left: 10px; color: var(--dim); margin: 6px 0; }
+.conv-tools { margin-top: 8px; }
+.conv-tool { display: inline-block; background: rgba(187,154,247,0.12); color: #bb9af7; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: monospace; margin: 2px 4px 2px 0; }
+.conv-tool-preview { color: var(--dim); font-size: 11px; margin-top: 2px; word-break: break-all; }
+.jsonl-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--dim); font-family: system-ui; }
+.jsonl-meta { font-size: 11px; color: var(--dim); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
 /* Controls */
 .controls { border-top: 1px solid var(--border); padding: 10px 16px; flex-shrink: 0; }
 .quick-btns { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -92,6 +117,7 @@ header button:hover { border-color: var(--accent); }
     </div>
     <div class="terminal-text empty" id="terminal-text">Select a pane from the sidebar</div>
     <div id="xterm-container"></div>
+    <div id="jsonl-view"></div>
     <div class="controls" id="controls" style="display:none">
       <div class="quick-btns">
         <button onclick="sendQuick('C-c')" class="danger" title="Ctrl+C">Ctrl+C</button>
@@ -117,6 +143,7 @@ header button:hover { border-color: var(--accent); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script>
 // --- State ---
 let activePaneId = null;
@@ -125,10 +152,12 @@ let currentState = '';
 let streamTimer = null;
 const STREAM_DELAY = 5000;
 
-// --- Display mode: 'text' or 'xterm' ---
-let displayMode = (new URLSearchParams(window.location.search)).get('mode') === 'text' ? 'text' : 'xterm';
+// --- Display mode: 'text', 'xterm', or 'jsonl' ---
+const urlMode = (new URLSearchParams(window.location.search)).get('mode');
+let displayMode = ['text', 'xterm', 'jsonl'].includes(urlMode) ? urlMode : 'xterm';
 let xterm = null;
 let xtermReady = false;
+let jsonlTimer = null;
 
 function initXterm(cols, rows) {
   if (xterm) return;
@@ -168,28 +197,44 @@ function applyMode() {
   const modeLabel = document.getElementById('mode-label');
   const textEl = document.getElementById('terminal-text');
   const xtermEl = document.getElementById('xterm-container');
+  const jsonlEl = document.getElementById('jsonl-view');
+
+  textEl.style.display = 'none';
+  xtermEl.style.display = 'none';
+  jsonlEl.style.display = 'none';
+  stopJsonlPolling();
 
   if (displayMode === 'xterm') {
     modeLabel.textContent = 'Terminal mode';
-    modeBtn.textContent = 'Switch to Text';
-    textEl.style.display = 'none';
+    modeBtn.textContent = 'Switch to JSON';
     xtermEl.style.display = 'block';
+  } else if (displayMode === 'jsonl') {
+    modeLabel.textContent = 'Conversation mode';
+    modeBtn.textContent = 'Switch to Text';
+    jsonlEl.style.display = 'block';
   } else {
     modeLabel.textContent = 'Text mode';
     modeBtn.textContent = 'Switch to Terminal';
     textEl.style.display = '';
-    xtermEl.style.display = 'none';
   }
+
   // Re-fetch current pane in new mode
   if (activePaneId) {
     stopStream();
-    fetchCapture(activePaneId);
-    scheduleStream(activePaneId);
+    if (displayMode === 'jsonl') {
+      fetchJsonl(activePaneId);
+      startJsonlPolling(activePaneId);
+    } else {
+      fetchCapture(activePaneId);
+      scheduleStream(activePaneId);
+    }
   }
 }
 
 function toggleMode() {
-  displayMode = displayMode === 'xterm' ? 'text' : 'xterm';
+  const modes = ['xterm', 'jsonl', 'text'];
+  const idx = modes.indexOf(displayMode);
+  displayMode = modes[(idx + 1) % modes.length];
   applyMode();
 }
 
@@ -261,8 +306,14 @@ function selectPane(el) {
   document.getElementById('hdr-cwd').textContent = cwd;
 
   stopStream();
-  fetchCapture(paneId);
-  scheduleStream(paneId);
+  stopJsonlPolling();
+  if (displayMode === 'jsonl') {
+    fetchJsonl(paneId);
+    startJsonlPolling(paneId);
+  } else {
+    fetchCapture(paneId);
+    scheduleStream(paneId);
+  }
 }
 
 // --- SSE Stream (lazy connection) ---
@@ -397,6 +448,85 @@ function sendInput() {
 document.getElementById('cmd-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); sendInput(); }
 });
+
+// --- JSONL / Conversation view ---
+async function fetchJsonl(paneId) {
+  const id = paneId.replace('%', '');
+  const view = document.getElementById('jsonl-view');
+  view.innerHTML = '<div class="jsonl-empty">Loading conversation...</div>';
+  try {
+    const resp = await fetch(`/api/pane/${id}/jsonl?limit=40`);
+    const data = await resp.json();
+    if (activePaneId !== paneId) return;
+    if (data.error && !data.messages.length) {
+      view.innerHTML = `<div class="jsonl-empty">${esc(data.error)}</div>`;
+      return;
+    }
+    renderJsonl(data, view);
+  } catch (e) {
+    if (activePaneId === paneId) {
+      view.innerHTML = `<div class="jsonl-empty">Error: ${esc(e.message)}</div>`;
+    }
+  }
+}
+
+function renderJsonl(data, container) {
+  let html = '';
+  if (data.session_file) {
+    html += `<div class="jsonl-meta">Session: ${esc(data.session_file)} &middot; Agent: ${esc(data.agent)}</div>`;
+  }
+  if (!data.messages || !data.messages.length) {
+    html += '<div class="jsonl-empty">No conversation messages found</div>';
+    container.innerHTML = html;
+    return;
+  }
+  for (const msg of data.messages) {
+    const role = msg.role || 'unknown';
+    const roleLabel = role === 'user' ? 'User' : role === 'assistant' ? 'Assistant' : 'System';
+    html += `<div class="conv-msg ${esc(role)}">`;
+    html += `<div class="conv-role ${esc(role)}">${roleLabel}</div>`;
+    if (msg.content) {
+      html += `<div class="conv-body">${renderMarkdown(msg.content)}</div>`;
+    }
+    if (msg.tools && msg.tools.length) {
+      html += '<div class="conv-tools">';
+      for (const tool of msg.tools) {
+        html += `<span class="conv-tool">${esc(tool.name)}</span>`;
+        if (tool.input_preview) {
+          html += `<div class="conv-tool-preview">${esc(tool.input_preview)}</div>`;
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  const atBottom = isScrolledToBottom(container);
+  container.innerHTML = html;
+  if (atBottom) container.scrollTop = container.scrollHeight;
+}
+
+function renderMarkdown(text) {
+  if (typeof marked !== 'undefined') {
+    try { return marked.parse(text); } catch(e) {}
+  }
+  // Fallback: escape and preserve newlines
+  return '<p>' + esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+}
+
+function startJsonlPolling(paneId) {
+  stopJsonlPolling();
+  jsonlTimer = setInterval(() => {
+    if (activePaneId === paneId && displayMode === 'jsonl') {
+      fetchJsonl(paneId);
+    } else {
+      stopJsonlPolling();
+    }
+  }, 5000);
+}
+
+function stopJsonlPolling() {
+  if (jsonlTimer) { clearInterval(jsonlTimer); jsonlTimer = null; }
+}
 
 // --- Util ---
 function esc(s) {
