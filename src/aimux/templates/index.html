@@ -154,7 +154,9 @@ const STREAM_DELAY = 5000;
 
 // --- Display mode: 'text', 'xterm', or 'jsonl' ---
 const urlMode = (new URLSearchParams(window.location.search)).get('mode');
-let displayMode = ['text', 'xterm', 'jsonl'].includes(urlMode) ? urlMode : 'xterm';
+const savedMode = localStorage.getItem('aimux_mode');
+let displayMode = ['text', 'xterm', 'jsonl'].includes(urlMode) ? urlMode
+  : ['text', 'xterm', 'jsonl'].includes(savedMode) ? savedMode : 'xterm';
 let xterm = null;
 let xtermReady = false;
 let jsonlTimer = null;
@@ -235,6 +237,7 @@ function toggleMode() {
   const modes = ['xterm', 'jsonl', 'text'];
   const idx = modes.indexOf(displayMode);
   displayMode = modes[(idx + 1) % modes.length];
+  localStorage.setItem('aimux_mode', displayMode);
   applyMode();
 }
 
@@ -294,6 +297,7 @@ function selectPane(el) {
   document.querySelectorAll('.pane-item.active').forEach(e => e.classList.remove('active'));
   el.classList.add('active');
   activePaneId = paneId;
+  localStorage.setItem('aimux_pane', paneId);
 
   document.getElementById('pane-header').style.display = 'flex';
   document.getElementById('controls').style.display = 'block';
@@ -558,7 +562,13 @@ function esc(s) {
 
 // --- Init ---
 applyMode();
-refreshTree();
+refreshTree().then(() => {
+  const savedPane = localStorage.getItem('aimux_pane');
+  if (savedPane && !activePaneId) {
+    const el = document.querySelector(`.pane-item[data-pane="${savedPane}"]`);
+    if (el) selectPane(el);
+  }
+});
 setInterval(refreshTree, 10000);
 
 </script>
