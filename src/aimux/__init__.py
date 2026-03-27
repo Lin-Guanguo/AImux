@@ -57,17 +57,18 @@ def _cmd_scan() -> None:
 
 
 def _cmd_wait(args: list[str]) -> None:
-    """aimux wait <pane_id> [--timeout N] [--interval N] [--reply-max N]"""
+    """aimux wait <pane_id> [--timeout N] [--interval N] [--reply-max N] [--output-file PATH]"""
     from .watcher import DEFAULT_REPLY_MAX, wait_for_idle
 
     if not args or args[0].startswith("-"):
-        print("Usage: aimux wait <pane_id> [--timeout 300] [--interval 2] [--reply-max 4000]", file=sys.stderr)
+        print("Usage: aimux wait <pane_id> [--timeout 300] [--interval 2] [--reply-max 4000] [--output-file /tmp/result.json]", file=sys.stderr)
         sys.exit(1)
 
     pane_id = args[0]
     timeout = 300.0
     interval = 2.0
     reply_max = DEFAULT_REPLY_MAX
+    output_file = None
 
     # Simple arg parsing
     i = 1
@@ -81,11 +82,24 @@ def _cmd_wait(args: list[str]) -> None:
         elif args[i] == "--reply-max" and i + 1 < len(args):
             reply_max = int(args[i + 1])
             i += 2
+        elif args[i] == "--output-file" and i + 1 < len(args):
+            output_file = args[i + 1]
+            i += 2
         else:
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             sys.exit(1)
 
+    # Redirect stdout to file to avoid shell quoting/expansion issues
+    # when the JSON output is consumed by downstream notification chains.
+    if output_file:
+        sys.stdout = open(output_file, "w")
+
     exit_code = wait_for_idle(pane_id, timeout=timeout, interval=interval, reply_max=reply_max)
+
+    if output_file:
+        sys.stdout.close()
+        sys.stdout = sys.__stdout__
+
     sys.exit(exit_code)
 
 

@@ -155,10 +155,13 @@ aimux
 tmux send-keys -t <pane_id> "your instruction here" Enter
 
 # 3. 后台监听 + 完成通知（关键！）
-exec background:true command:"cd /path/to/AImux && uv run aimux wait <pane_id> --timeout 300; openclaw agent --agent main --channel discord --to 'discord:861231414467756062' --message 'pane <pane_id> 任务完成' --deliver --timeout 60"
+#    用 --output-file 把 JSON 写到文件，避免 shell 管道/变量展开破坏 JSON
+exec background:true command:"cd /path/to/AImux && uv run aimux wait <pane_id> --timeout 300 --output-file /tmp/aimux_wait_<pane_id>.json; python3 -c \"import json; d=json.load(open('/tmp/aimux_wait_<pane_id>.json')); reply=(d.get('reply') or 'no reply')[:500]; exit_state=d.get('state','?')\" && openclaw agent --agent main --channel discord --to 'discord:861231414467756062' --message 'pane <pane_id> 任务完成' --deliver --timeout 60"
 
 # 4. 立即回复用户，不要等
 ```
+
+> **⚠ 不要** 用 `$(uv run aimux wait ...)` 捕获输出再 `json.loads("$result")`——`reply` / `pane_tail` 里的 `$`、反引号等字符会被 shell 展开导致 JSON 解析失败。始终用 `--output-file` 写文件再 `json.load(open(...))` 读取。
 
 当 `aimux wait` 退出后，`openclaw agent --deliver` 会注入消息触发你的 agent turn，你会被唤醒并可以在当前对话中主动汇报结果。
 
